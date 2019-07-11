@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description : "create AutoScaling template"
+Parameters:
+    SystemName:
+        Type: String
+    Env:
+        Type: String
+        AllowedValues: 
+            - "prd"
+            - "stg"
+            - "dev"
+    AMIID:
+        Description: EC2 AMIID.
+        Type: String
+    InstanceType:
+        Description: EC2 InstanceType.
+        Type: String
+        Default: t2.micro
+    KeyName:
+        Description: EC2 Key pare name.
+        Type: String
+    AutoScalingCooldownTime:
+        Description: AutoScaling CooldownTime(Sec).
+        Type: String
+        Default: 300
+    AutoScalingMaxSize:
+        Description: AutoScaling MaxSize.
+        Type: String
+        Default: 4 
+    AutoScalingMinSize:
+        Description: AutoScaling MinSize.
+        Type: String
+        Default: 2
+    AutoScalingTerminationPolicy:
+        Description: AutoScaling TerminationPolicy.
+        Type: String
+        Default: NewestInstance
+    SNSAutoScalingTopicName:
+        Description: AutoScaling SNSTopicName.
+        Type: String
+        Default: "autoscaling"
+    SNSEmailAddress:
+        Description: AutoScaling SNSEmailAddress.
+        Type: String
+        Default: "xxxx@xxx.xxx"
+    CPUAlarmHighThreshold:
+        Description: CloudWatchAlarm CPUUtilization rate.
+        Type: String
+        Default: 90
+    CPUAlarmHighPeriod:
+        Description: CloudWatchAlarm CPUAlarmHigh Period.
+        Type: Number
+        Default: 300
+    CPUAlarmHighEvaluationPeriods:
+        Description: CloudWatchAlarm CPUAlarmHigh EvaluationPeriods.
+        Type: Number
+        Default: 2
+Resources:
+# AutoScaling Create
+    LaunchConfiguration:
+        Type: AWS::AutoScaling::LaunchConfiguration
+        Properties: 
+            ImageId: !Ref AMIID
+            InstanceType: !Ref InstanceType
+            KeyName: !Ref KeyName
+            SecurityGroups:
+              - Fn::ImportValue: !Sub "${Env}-${SystemName}-EC2SecurityGroup"
+    
+    ApServerGroup:
+        Type: AWS::AutoScaling::AutoScalingGroup
+        Properties: 
+            AutoScalingGroupName: !Sub "${Env}-${SystemName}-ApServerAutoScalingGroup"
+            VPCZoneIdentifier:
+             - Fn::ImportValue: !Sub "${Env}-${SystemName}-PrivateSubnet1"
+             - Fn::ImportValue: !Sub "${Env}-${SystemName}-PrivateSubnet2"
+            Cooldown: !Ref AutoScalingCooldownTime
+            LaunchConfigurationName: !Ref LaunchConfiguration
+            MaxSize: !Ref AutoScalingMaxSize
+            MinSize: !Ref AutoScalingMinSize
+            TerminationPolicies:
+             - !Ref AutoScalingTerminationPolicy
+            NotificationConfigurations:
+            - TopicARN:
+                Ref: SNSAutoscalingTopic
+              NotificationTypes:
+              - autoscaling:EC2_INSTANCE_LAUNCH
+              - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+              - autoscaling:EC2_INSTANCE_TERMINATE
+              - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+    
+    ScalingPolicy:
+        Type: AWS::AutoScaling::ScalingPolicy
+        Properties:
+            AdjustmentType: ChangeInCapacity
+            PolicyType: SimpleScaling
+            AutoScalingGroupName: 
+                Ref: ApServerGroup
+            Cooldown: 300
+            ScalingAdjustment: 1
+
+# CloudWatch Alarm create
+    CPUAlarmHigh:
+        Type: AWS::CloudWatch::Alarm
+        Properties:
+            AlarmDescription: Alarm if CPU too high or metric disappears indicating instance
+            EvaluationPeriods: 2
+            Statistic: Average
+            Threshold: !Ref CPUAlarmHighThreshold
+            Period: !Ref CPUAlarmHighPeriod
+            AlarmActions:
+            - Ref: ScalingPolicy
+            Namespace: AWS/EC2
+            ComparisonOperator: GreaterThanThreshold
+            MetricName: CPUUtilization
+
+# SNS Topic&Subscription Create
+    SNSAutoscalingTopic:
+        Type: AWS::SNS::Topic
+        Properties:
+            TopicName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "Ref":"SNSAutoScalingTopicName"]]
+    SNSAutoscalingSubscription:
+        Type: AWS::SNS::Subscription
+        Properties:
+            Endpoint: !Ref SNSEmailAddress
+            Protocol: "email"
+            TopicArn: !Ref SNSAutoscalingTopic
