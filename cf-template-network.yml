@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description : "create network&VpcEndpoint template"
+Parameters:
+    SystemName:
+        Type: String
+    Env:
+        Type: String
+        AllowedValues: 
+            - "prd"
+            - "stg"
+            - "dev"
+    PrivateSubnet1AZ:
+        Type: AWS::EC2::AvailabilityZone::Name
+    PrivateSubnet2AZ:
+        Type: AWS::EC2::AvailabilityZone::Name
+    VPCCIDR:
+        Type: String
+        Default: "10.1.0.0/16"
+    PrivateSubnet1CIDR:
+        Type: String
+        Default: "10.1.10.0/24"
+    PrivateSubnet2CIDR:
+        Type: String
+        Default: "10.1.20.0/24"
+Resources:
+    VPC:
+        Type: AWS::EC2::VPC
+        Properties:
+            EnableDnsSupport: true
+            EnableDnsHostnames: true
+            CidrBlock: !Ref VPCCIDR
+            Tags:
+            - Key: Application
+              Value: 
+                Ref: AWS::StackId
+            - Key: env
+              Value: 
+                Ref: Env
+    RouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags:
+            - Key: Application
+              Value:
+                Ref: AWS::StackId
+            - Key: env
+              Value: 
+                Ref: Env
+    S3Endpoint:
+        Type: AWS::EC2::VPCEndpoint
+        Properties:
+            RouteTableIds:
+            - !Ref RouteTable
+            ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+            VpcId: 
+                !Ref VPC
+            VpcEndpointType: Gateway
+    SQSEndpoint:
+        Type: AWS::EC2::VPCEndpoint
+        Properties:
+            ServiceName: !Sub "com.amazonaws.${AWS::Region}.sqs"
+            VpcId: 
+                !Ref VPC
+            VpcEndpointType: Interface
+    DynamodbEndpoint:
+        Type: AWS::EC2::VPCEndpoint
+        Properties:
+            RouteTableIds:
+            - !Ref RouteTable
+            ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
+            VpcId: 
+                !Ref VPC
+            VpcEndpointType: Gateway
+    SnsEndpoint:
+        Type: AWS::EC2::VPCEndpoint
+        Properties:
+            ServiceName: !Sub "com.amazonaws.${AWS::Region}.sns"
+            VpcId: 
+                !Ref VPC
+            VpcEndpointType: Interface
+    PrivateSubnet1: 
+        Type: AWS::EC2::Subnet
+        Properties: 
+            VpcId: 
+                !Ref VPC
+            CidrBlock: !Ref PrivateSubnet1CIDR
+            AvailabilityZone: !Ref PrivateSubnet1AZ
+            Tags:
+            - Key: Application
+              Value:
+                Ref: AWS::StackId
+            - Key: env
+              Value: 
+                Ref: Env
+    PrivateSubnet2: 
+        Type: AWS::EC2::Subnet
+        Properties: 
+            VpcId: 
+                !Ref VPC
+            CidrBlock: !Ref PrivateSubnet2CIDR
+            AvailabilityZone: !Ref PrivateSubnet2AZ
+            Tags:
+            - Key: Application
+              Value:
+                Ref: AWS::StackId
+            - Key: env
+              Value: 
+                Ref: Env
+    SubnetRouteTableAssociation1:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            SubnetId:
+                Ref: PrivateSubnet1
+            RouteTableId:
+                Ref: RouteTable
+    SubnetRouteTableAssociation2:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            SubnetId:
+                Ref: PrivateSubnet2
+            RouteTableId:
+                Ref: RouteTable
+Outputs:
+    OutPrivateSubnet1:
+        Value: !Ref PrivateSubnet1
+        Export:
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "PrivateSubnet1"]]
+    OutPrivateSubnet2:
+        Value: !Ref PrivateSubnet2
+        Export:
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "PrivateSubnet2"]]
