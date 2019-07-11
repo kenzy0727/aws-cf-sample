@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description : "create service&policy template"
+Parameters:
+    SystemName:
+        Type: String
+    Env:
+        Type: String
+        AllowedValues: 
+            - "prd"
+            - "stg"
+            - "dev"
+    S3BucketName1:
+        Description: ReqestPdf BacketName.
+        Type: String
+        Default: "pdf-image"
+    S3BucketName2:
+        Description: ResultCsv BacketName.
+        Type: String
+        Default: "result-csv"
+    SNSTopicName:
+        Description: ApplicationSendError SNSTopicName.
+        Type: String
+        Default: "error"
+    SNSEmailAddress:
+        Description: ApplicationSendError SNSEmailAddress.
+        Type: String
+        Default: "xxxx@xxx.xxxx"
+    QueueName:
+        Description: Request SQS QueueName.
+        Type: String
+        Default: "requests"
+    DLQName:
+        Description: Request SQS DeadLetterQueueName.
+        Type: String
+        Default: "requests-dlq"
+    VisibilityTimeout:
+        Description: SQS VisibilityTimeout.
+        Type: Number
+        Default: 30
+    MessageRetentionPeriod:
+        Description: SQS MessageRetentionPeriod.
+        Type: Number
+        Default: 86400 # 1day
+    ReceiveMessageWaitTimeSeconds:
+        Description: SQS ReceiveMessageWaitTimeSeconds.
+        Type: Number
+        Default: 10
+    DynamoDBTableName:
+        Description: DynamoDB TableName.
+        Type: String
+        Default: "requests"
+    ReadCapacityUnits:
+        Description: DynamoDB ReadCapacityUnits.
+        Type: Number
+        Default: 5
+    WriteCapacityUnits:
+        Description: DynamoDB WriteCapacityUnits.
+        Type: Number
+        Default: 5
+    DeadLetterQueuemaxReceiveCount:
+        Description: DynamoDB DeadLetterQueuemaxReceiveCount.
+        Type: Number
+        Default: 5
+    CloudWatchLogGroupName:
+        Description: CloudWatch LogGroupName.
+        Type: String
+        Default: "app-error"
+
+Resources:
+# S3 Bucket Create
+    S3Bucket1:
+        Type: AWS::S3::Bucket
+        Properties:
+            BucketName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "Ref":"S3BucketName1"]]
+            AccessControl: Private
+            PublicAccessBlockConfiguration: 
+                BlockPublicAcls: True
+                BlockPublicPolicy: True
+                IgnorePublicAcls: True
+                RestrictPublicBuckets: True
+            BucketEncryption:
+                ServerSideEncryptionConfiguration: 
+                - ServerSideEncryptionByDefault:
+                    SSEAlgorithm: AES256
+            Tags:
+            - Key: Application
+              Value: 
+                Ref: AWS::StackId
+            - Key: env
+              Value: 
+                Ref: Env
+    S3Bucket2:
+        Type: AWS::S3::Bucket
+        Properties:
+            BucketName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "Ref":"S3BucketName2"]]
+            AccessControl: Private
+            PublicAccessBlockConfiguration: 
+                BlockPublicAcls: True
+                BlockPublicPolicy: True
+                IgnorePublicAcls: True
+                RestrictPublicBuckets: True
+            BucketEncryption:
+                ServerSideEncryptionConfiguration: 
+                - ServerSideEncryptionByDefault:
+                    SSEAlgorithm: AES256
+            Tags:
+            - Key: Application
+              Value: 
+                Ref: AWS::StackId
+            - Key: env
+              Value: 
+                Ref: Env
+
+# SNS Topic&Subscription Create
+    SNSTopic:
+        Type: AWS::SNS::Topic
+        Properties:
+            TopicName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "Ref":"SNSTopicName"]]
+    SNSSubscription:
+        Type: AWS::SNS::Subscription
+        Properties:
+            Endpoint: !Ref SNSEmailAddress
+            Protocol: "email"
+            TopicArn: !Ref SNSTopic
+
+# SQS Queue Create
+    SQSQueue:
+        Type: AWS::SQS::Queue
+        Properties:
+            QueueName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "Ref":"QueueName"]]
+            VisibilityTimeout: !Ref VisibilityTimeout
+            MessageRetentionPeriod: !Ref MessageRetentionPeriod
+            ReceiveMessageWaitTimeSeconds: !Ref ReceiveMessageWaitTimeSeconds
+            RedrivePolicy:
+                deadLetterTargetArn:
+                    Fn::GetAtt: 
+                      - SQSDeadLetterQueue
+                      - Arn
+                maxReceiveCount: !Ref DeadLetterQueuemaxReceiveCount
+            Tags:
+            - Key: Application
+              Value: 
+                Ref: AWS::StackId
+            - Key: env
+              Value: 
+                Ref: Env
+# SQS DLQ Create
+    SQSDeadLetterQueue:
+        Type: AWS::SQS::Queue
+        Properties:
+            QueueName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "Ref":"DLQName"]]
+            MessageRetentionPeriod: !Ref MessageRetentionPeriod
+    
+# Dynamodb Table Create
+    DynamoDBTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+            TableName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "Ref":"DynamoDBTableName"]]
+            AttributeDefinitions: 
+            - 
+                AttributeName: "request_id"
+                AttributeType: "S"
+            KeySchema: 
+            - 
+                AttributeName: "request_id"
+                KeyType: "HASH"
+            ProvisionedThroughput:
+                ReadCapacityUnits: !Ref ReadCapacityUnits
+                WriteCapacityUnits: !Ref WriteCapacityUnits
+            Tags:
+            - Key: Application
+              Value: 
+                Ref: AWS::StackId
+            - Key: env
+              Value: 
+                Ref: Env
+# CloudWatchLogs LogGroup Create
+    CloudWatchLogGroup:
+        Type: AWS::Logs::LogGroup
+        Properties:
+            LogGroupName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "Ref":"CloudWatchLogGroupName"]]
+            # RetentionInDays: 7
+
+Outputs:
+    OutS3Bucket1:
+        Value: !GetAtt S3Bucket1.Arn
+        Export: 
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "S3Bucket1"]]
+    OutS3Bucket2:
+        Value: !GetAtt S3Bucket2.Arn
+        Export: 
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "S3Bucket2"]]
+    OutSNSTopic:
+        Value: !Ref SNSTopic
+        Export: 
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "SNSTopic"]]
+    OutSQSQueue:
+        Value: !GetAtt SQSQueue.Arn
+        Export: 
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "SQSQueue"]]
+    OutDynamoDBTable:
+        Value: !GetAtt DynamoDBTable.Arn
+        Export: 
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "DynamoDBTable"]]
+    OutCloudWatchLogGroup:
+        Value: !GetAtt CloudWatchLogGroup.Arn
+        Export: 
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "CloudWatchLogGroup"]]

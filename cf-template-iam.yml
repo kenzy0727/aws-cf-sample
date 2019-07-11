@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description : "create iam policy&Role template"
+Parameters:
+    SystemName:
+        Type: String
+    Env:
+        Type: String
+        AllowedValues: 
+            - "prd"
+            - "stg"
+            - "dev"
+    EC2RoleName:
+        Description: EC2 IAM RoleName.
+        Type: String
+        Default: "ec2-role"
+Resources:
+# IAM Role Create
+    EC2Role:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                  - Effect: "Allow"
+                    Principal:
+                      Service: 
+                        - "ec2.amazonaws.com"
+                    Action:
+                      - "sts:AssumeRole"
+            Path: "/"
+            RoleName: !Sub "${Env}-${SystemName}-${EC2RoleName}"
+# IAM Customer Policy Create
+    S3Policy:
+        Type: AWS::IAM::ManagedPolicy 
+        Properties: 
+            ManagedPolicyName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "S3Policy"]]
+            PolicyDocument: 
+                Version: "2012-10-17"
+                Statement: 
+                  - Effect: "Allow"
+                    Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                    Resource: 
+                    - Fn::Join: 
+                        - ""
+                        - - Fn::ImportValue: !Sub "${Env}-${SystemName}-S3Bucket1"
+                          - /*
+                    - Fn::Join: 
+                        - ""
+                        - - Fn::ImportValue: !Sub "${Env}-${SystemName}-S3Bucket2"
+                          - /*
+            Roles:
+                - Ref: EC2Role 
+    SNSPolicy:
+        Type: AWS::IAM::ManagedPolicy 
+        Properties: 
+            ManagedPolicyName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "SNSPolicy"]]
+            PolicyDocument: 
+                Version: "2012-10-17"
+                Statement: 
+                  - Effect: "Allow"
+                    Action:
+                    - sns:Publish
+                    - sns:Subscribe
+                    Resource:
+                    - Fn::ImportValue: !Sub "${Env}-${SystemName}-SNSTopic"
+            Roles:
+                - Ref: EC2Role
+    SQSQueuePolicy:
+        Type: AWS::IAM::ManagedPolicy 
+        Properties: 
+            ManagedPolicyName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "SQSQueuePolicy"]]
+            PolicyDocument: 
+                Version: "2012-10-17"
+                Statement: 
+                  - Effect: "Allow"
+                    Action:
+                    - sqs:SendMessage
+                    - sqs:SendMessageBatch
+                    - sqs:DeleteMessage
+                    - sqs:DeleteMessageBatch
+                    - sqs:ReceiveMessage
+                    Resource: 
+                    - Fn::ImportValue: !Sub "${Env}-${SystemName}-SQSQueue"
+            Roles:
+                - Ref: EC2Role 
+    DynamodbPolicy:
+        Type: AWS::IAM::ManagedPolicy 
+        Properties: 
+            ManagedPolicyName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "DynamodbPolicy"]]
+            PolicyDocument: 
+                Version: "2012-10-17"
+                Statement: 
+                  - Effect: "Allow"
+                    Action:
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                    Resource:
+                    - Fn::ImportValue: !Sub "${Env}-${SystemName}-DynamoDBTable"
+            Roles:
+                - Ref: EC2Role
+    CloudwatchlogsPolicy:
+        Type: AWS::IAM::ManagedPolicy 
+        Properties: 
+            ManagedPolicyName: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "CloudwatchlogsPolicy"]]
+            PolicyDocument: 
+                Version: "2012-10-17"
+                Statement: 
+                  - Effect: "Allow"
+                    Action:
+                      - logs:PutLogEvents
+                    Resource:
+                    - Fn::ImportValue: !Sub "${Env}-${SystemName}-CloudWatchLogGroup"
+            Roles:
+                - Ref: EC2Role
+Outputs:
+    OutEC2Role:
+        Value: !GetAtt EC2Role.Arn
+        Export: 
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "EC2Role"]]
