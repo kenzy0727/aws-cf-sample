@@ -122,6 +122,23 @@ Resources:
                 Ref: PrivateSubnet2
             RouteTableId:
                 Ref: RouteTable
+# SecurityGroup Create
+    EC2SecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: EC2 Allow RDP
+            GroupName: !Sub "${Env}-${SystemName}-EC2"
+            VpcId:
+                Ref: VPC
+            SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: 3389
+                  ToPort: 3389
+                  CidrIp: 0.0.0.0/0
+            Tags:
+            - Key: env
+              Value: 
+                Ref: Env
 Outputs:
     OutPrivateSubnet1:
         Value: !Ref PrivateSubnet1
@@ -131,3 +148,7 @@ Outputs:
         Value: !Ref PrivateSubnet2
         Export:
             Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "PrivateSubnet2"]]
+    OutEC2SecurityGroup:
+        Value: !Ref EC2SecurityGroup
+        Export:
+            Name: !Join [ "-", [ "Ref":"Env", "Ref":"SystemName", "EC2SecurityGroup"]]
